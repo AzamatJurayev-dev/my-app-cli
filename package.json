@@ -1,0 +1,14 @@
+{
+  "name": "my-stack-cli",
+  "version": "1.0.0",
+  "type": "module",
+  "bin": {
+    "create-my-stack": "./index.js"
+  },
+  "dependencies": {
+    "boxen": "^8.0.1",
+    "chalk": "^5.3.0",
+    "inquirer": "^9.2.19",
+    "ora": "^9.4.1"
+  }
+}
