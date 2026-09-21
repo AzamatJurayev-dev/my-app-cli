@@ -1,56 +1,107 @@
-# 🚀 Custom Stack CLI Generator (v2.5 AI-Ready PRO)
+# 🚀 Custom Stack CLI Generator (v3.5 Universal Fullstack)
 
-Next.js 15 (Public Web), React Vite (Admin Panel), Go Clean Architecture (Backend), DevOps (Docker, Makefile, Git) va **barcha AI agentlar (Cursor, Claude, Copilot, Antigravity, Windsurf) uchun qat'iy qoidalar tizimini** avtomatik shakllantiruvchi universal CLI vositasi.
+Next.js 15 (Public Web + Shadcn UI), React Vite (Admin Panel + Ant Design), Go Clean Architecture (Backend + Auth + Migrations + Seed), DevOps (Docker, Makefile, Git, Husky), **Yagona `npm run dev` (barcha servislarni bitta terminalda bir vaqtda ishga tushirish)** hamda **barcha AI agentlar (Cursor, Claude, Copilot, Antigravity, Windsurf) uchun qat'iy qoidalar tizimini** avtomatik shakllantiruvchi universal CLI vositasi.
 
 ---
 
-## 📌 Yangi Imkoniyatlar va Xususiyatlar
+## 📌 Asosiy Imkoniyatlar va Standartlar
 
-### 🤖 1. Universal AI Guardrails & Qat'iy Qoidalar Tizimi
-Ko'pincha sun'iy intellekt vositalari (Cursor, Claude Code, GitHub Copilot, Antigravity) bilan ishlaganda quyidagi muammolar kuzatiladi:
-- Keraksiz va ortiqcha kodlar yozish (*Over-engineering*).
-- Yozgan kodini tekshirmasdan tashlab ketish.
-- Biron fayl yoki funksiyani o'chirishdan oldin loyihaning boshqa joylariga ta'sirini o'rganmaslik (natijada runtime errorlar).
-- Taskdan chiqib ketish va arxitekturani buzish.
+### ⚡ 1. Yagona `npm run dev` (Bitta terminalda 3 ta servis)
+3 ta alohida terminal oynasi ochib, har bir papkaga `cd` qilib yurishga hojat yo'q!
+Loyiha root papkasida bitta buyruq bilan barcha mavjud servislarni rang-barang loglar bilan ishga tushirasiz:
 
-**Bizning CLI vositamiz ushbu muammoni ildizi bilan hal qiladi!** Har safar loyiha yaratilganda, barcha AI modellar o'qiydigan quyidagi fayllar avtomatik generatsiya qilinadi:
-- **`AGENTS.md`** & **`RULES.md`** — Universal xalqaro AI Agent standarti (OpenAI, DeepMind, Next.js).
-- **`.cursorrules`** & **`.cursor/rules/guardrails.mdc`** — Cursor IDE uchun qat'iy qoidalar.
-- **`CLAUDE.md`** — Anthropic Claude Code terminal vositasi uchun buyruqlar va cheklovlar.
-- **`.github/copilot-instructions.md`** — GitHub Copilot va VS Code Copilot agenti uchun ko'rsatmalar.
-- **`.windsurfrules`** — Windsurf (Codeium) muharriri uchun qoidalar.
+```bash
+npm run dev
+```
+
+Terminalda bir vaqtda real-time oqimlar ko'rinadi:
+- `[BACKEND]` (cyan) 🚀 Gin Backend 8080-portda ishga tushdi...
+- `[PUBLIC] ` (blue) ▲ Next.js 15 (http://localhost:3000)
+- `[ADMIN]  ` (magenta) ➜ Local: http://localhost:5173/
+
+Alohida ishga tushirish uchun:
+- `npm run dev:backend`
+- `npm run dev:public`
+- `npm run dev:admin`
+
+---
+
+### 🔄 2. Mavjud Loyihaga Yangi Modul Qo‘shish (Incremental Mode)
+Boshida faqat Backend va Admin yaratdingizmi? Keyinchalik Public (Next.js) qo'shmoqchimisiz?
+Hech qisi yo'q! Istalgan vaqtda:
+- O'sha loyiha papkasi ichida turib yoki loyiha nomini kiritib `create-my-stack` buyrug'ini bering.
+- CLI avtomatik ravishda mavjud modullarni aniqlaydi (`[✔] Backend`, `[✔] Admin`, `[ ] Public`).
+- Sizga yetishmayotgan modulni qo'shishni taklif qiladi.
+- Yangi modul yaratilgach, root `package.json` (`npm run dev`), `Makefile` va barcha **AI Guardrails qoidalari** yangi modulni qamrab olgan holda avtomatik sinxronlanadi!
+
+---
+
+### ⚡ 3. Backend API (Go Clean Architecture + Auth + Migratsiya + Seed)
+- **To'liq Clean Architecture Auth:**
+  - `internal/domain/user.go` — `User` modeli, `LoginRequest`, `RegisterRequest`, `AuthResponse` DTOlari va interfeyslar.
+  - `internal/repository/user_repository.go` — GORM orqali foydalanuvchini saqlash va qidirish.
+  - `internal/usecase/auth_usecase.go` — Parollarni `bcrypt` orqali xeshlash (`golang.org/x/crypto/bcrypt`), login solishtirish va JWT token yaratish (`golang-jwt/jwt/v5`).
+  - `internal/delivery/http/handlers/auth_handler.go` — `/api/auth/register`, `/api/auth/login`, `/api/auth/me`.
+  - `internal/delivery/http/middleware/auth.go` — Himoyalangan yo'llar uchun JWT Bearer token tekshiruvchi middleware.
+- **Database Migratsiyasi:**
+  - `cmd/migrate/main.go` — Baza jadvallarini avtomatik yaratish (`make migrate-up`).
+- **Superadmin Seed (Dastlabki ma'lumotlar):**
+  - `cmd/seed/main.go` — Dastlabki superadmin hisobini avtomatik bazaga kiritish (`make seed`).
+  - **Superadmin Login:** `admin@example.com`
+  - **Parol:** `Admin123!`
+
+---
+
+### 🌐 4. Public Web (Next.js 15+ App Router + Shadcn UI + Toza Auth Mantiqi)
+- **Standart UI:** **Shadcn UI** sozlamalari (`components.json`, Tailwind CSS, `cn` helper).
+- **Toza Auth Logikasi (Vizual oynaga majburlamasdan):**
+  - Istagan UI komponentingiz yoki shaklingiz bilan erkin ishlashingiz uchun toza servis va state qatlami beriladi.
+  - `src/types/auth.ts` — User, LoginCredentials, RegisterData tiplari.
+  - `src/lib/axios.ts` — Request interceptor (har bir so'rovga avtomatik `Authorization: Bearer <token>` qo'shadi) va Response interceptor (401 da tokenni tozalaydi).
+  - `src/services/auth.service.ts` — `login()`, `register()`, `getMe()`, `logout()`.
+  - `src/hooks/use-auth.ts` — Zustand asosidagi reaktiv `useAuth` hooki (`user`, `token`, `isAuthenticated`, `isLoading`, `login()`, `logout()`).
+
+---
+
+### 📊 5. Admin Panel (React + Vite + Ant Design + Toza Auth Mantiqi)
+- **Standart UI:** **Ant Design (`antd`)** — Katta korporativ boshqaruv panellari, jadvallar va layoutlar uchun tayyor kutubxona.
+- **Toza Auth Logikasi:**
+  - `src/types/auth.ts` — Admin foydalanuvchi tiplari.
+  - `src/api/client.ts` — Axios interceptor (`admin_token` bilan avtomatik bog'lanish).
+  - `src/api/auth.service.ts` — API chaqiruvlari.
+  - `src/hooks/useAuth.ts` — Zustand `useAuth` hooki (`login`, `logout`, `fetchMe`).
+  - `src/pages/Dashboard.tsx` — Boshqaruv paneli.
+
+---
+
+### 🛠 6. DevOps & Developer Tooling (Husky, Docker, Makefile)
+- **Pre-commit Hooks (Husky + lint-staged):**
+  - Dasturchi yoki AI tasodifan xatoli kodni Git-ga commit qilmasligi uchun avtomatik tekshiruv.
+- **Docker Compose:**
+  - PostgreSQL 16 va Redis 7 konteynerlari tayyor holatda (`make docker-up`).
+- **Yagona Makefile:**
+  - `npm run dev` / `make dev` — Barcha servislarni bir vaqtda ishga tushirish.
+  - `make docker-up` / `make docker-down` — Konteynerlarni boshqarish.
+  - `make migrate-up` — Baza migratsiyasini yurgazish.
+  - `make seed` — Superadmin hisobini kiritish (`admin@example.com` / `Admin123!`).
+
+---
+
+### 🤖 7. Universal AI Guardrails & Qat'iy Qoidalar Tizimi
+Cursor, Claude Code, GitHub Copilot, Antigravity va Windsurf uchun loyiha rootida quyidagi qoidalar avtomatik shakllanadi:
+- **`AGENTS.md`** & **`RULES.md`** — Universal xalqaro AI Agent Konstitutsiyasi.
+- **`.cursorrules`** & **`.cursor/rules/guardrails.mdc`** — Cursor IDE uchun.
+- **`CLAUDE.md`** — Claude Code CLI uchun.
+- **`.github/copilot-instructions.md`** — GitHub Copilot uchun.
+- **`.windsurfrules`** — Windsurf muharriri uchun.
 
 #### 🛡️ AI uchun o'rnatiladigan 6 ta "Temir Qoida":
-1. **Surgical Precision (Minimalizm):** Faqat va faqat so'ralgan vazifani bajarish. So'ralmagan funksiyalarni, kutubxonalarni o'zboshimchalik bilan qo'shish va mavjud ishlab turgan kodni ruxsatsiz o'zgartirish qat'iyan taqiqlanadi.
-2. **Compulsory Impact Analysis (O'chirishdan oldin chuqur tahlil):** Biron funksiya, model yoki faylni o'chirishdan oldin loyiha bo'ylab `grep` qilib barcha chaqiruvchilarni tekshirish SHART. Bitta ham buzilgan import yoki xatolik qolmasligi lozim.
-3. **Verify Before Done (Majburiy tekshiruv):** AI kod yozgach `tsc --noEmit`, `npm run lint`, `go vet`, `go test` buyruqlarini bajarmaguncha va 0 ta xatolikni ta'minlamaguncha ishni "tayyor" deb e'lon qila olmaydi.
-4. **Mandatory Testing (Test yozish majburiyati):** Har bir yangi biznes-mantiq (usecase, service, helper) uchun unit test yozilishi shart.
-5. **Architectural Boundaries (Arxitektura chegaralari):** Go Clean Architecture (`domain` -> `usecase` -> `repository` -> `delivery`) va Next.js Server Components qoidalariga so'zsiz bo'ysunish.
-6. **No Assumptions (Gumon bo'lsa — so'rash):** Noaniq yoki ziddiyatli talablarda o'zidan to'qimasdan foydalanuvchidan aniqlashtirish.
-
----
-
-### 🌐 2. Public Web (Next.js 15+ App Router)
-- TypeScript, Tailwind CSS, App Router va toza arxitektura (`src/components`, `hooks`, `services`, `types`, `lib`, `constants`).
-- **Kutubxonalar tanlovi:** `@tanstack/react-query`, `zustand`, `react-hook-form` + `zod`, `axios`, `lucide-react`, `framer-motion`.
-- Avtomatik `cn` helper, `apiClient` va `.env.local` sozlamalari.
-
-### 📊 3. Admin Panel (React + Vite + TypeScript)
-- **UI Dizayn tizimi tanlovi:**
-  - **Ant Design** (Tayyor korporativ jadvallar, filtrlar va layoutlar)
-  - **Mantine UI** (Zamonaviy va boy komponentlar to'plami)
-  - **Tailwind CSS + Lucide Icons** (Moslashuvchan va yengil)
-- **Kutubxonalar:** `@tanstack/react-table`, `recharts` (dashboard diagrammalari), `react-router-dom`, `zustand`, `axios`.
-
-### ⚡ 4. Backend API (Go Clean Architecture)
-- **Framework tanlovi:** **Gin**, **Fiber**, **Chi**, yoki **Standart net/http**.
-- **Database / ORM tanlovi:** **PostgreSQL + GORM** (avtomatik migratsiya va modellar), **PostgreSQL + pgx/sqlx**, yoki minimal shablon.
-- **Qo'shimcha:** JWT autentifikatsiya middleware (`golang-jwt/jwt/v5`), CORS middleware va `.env` boshqaruvi.
-
-### 🛠 5. DevOps & Developer Tooling
-- `docker-compose.yml` (PostgreSQL 16 va Redis 7 konteynerlari tayyor healthcheck bilan).
-- `Makefile` (`make docker-up`, `make dev-backend`, `make dev-public`, `make dev-admin`).
-- Avtomatik `git init` va har bir tilga moslangan toza `.gitignore`.
+1. **Surgical Precision:** Faqat so'ralgan vazifani bajarish. So'ralmagan kodlarni yozish taqiqlanadi.
+2. **Impact Analysis:** O'chirish yoki o'zgartirishdan oldin butun loyiha bo'ylab `grep` qilib barcha chaqiruvchilarni tekshirish shart (0 broken references).
+3. **Verify Before Done:** `tsc --noEmit`, `npm run lint`, `go vet`, `go test` bajarmasdan ishni "tayyor" deb e'lon qilmaslik.
+4. **Mandatory Testing:** Har bir biznes-mantiq uchun unit test yozish.
+5. **Architectural Boundaries:** Go Clean Architecture (`domain` -> `usecase` -> `repository` -> `delivery`), Next.js Server Components va bcrypt/JWT qoidalariga bo'ysunish.
+6. **No Assumptions:** Noaniq talablarda taxmin qilmasdan foydalanuvchidan so'rash.
 
 ---
 
@@ -60,35 +111,46 @@ Ko'pincha sun'iy intellekt vositalari (Cursor, Claude Code, GitHub Copilot, Anti
 my-project/
 ├── .cursor/rules/guardrails.mdc   # Cursor yangi MDC qoidalari
 ├── .cursorrules                   # Cursor klassik qoidalari
-├── CLAUDE.md                      # Claude Code CLI qoidalari va buyruqlari
+├── CLAUDE.md                      # Claude Code CLI qoidalari
 ├── .github/copilot-instructions.md# GitHub Copilot ko'rsatmalari
 ├── .windsurfrules                 # Windsurf muharriri qoidalari
 ├── AGENTS.md                      # Universal AI Agent Konstitutsiyasi
 ├── RULES.md                       # Dasturchi va AI uchun umumiy qoidalar
 ├── docker-compose.yml             # PostgreSQL & Redis konteynerlari
-├── Makefile                       # Yagona boshqaruv buyruqlari
-├── .gitignore                     # Node, Go, OS va muhit fayllari uchun toza filtr
+├── Makefile                       # Barcha xizmatlarni boshqarish
+├── .gitignore                     # Toza git filtri
+├── package.json                   # Yagona "npm run dev" (concurrently) & Husky
 ├── README.md                      # Loyihani ishlatish bo'yicha to'liq qo'llanma
-├── my-project-public/             # Next.js 15 App Router
+├── my-project-public/             # Next.js 15 + Shadcn UI + Toza Auth logikasi
 │   ├── src/
-│   │   ├── components/
-│   │   ├── hooks/
-│   │   ├── services/
-│   │   ├── types/
-│   │   └── lib/
+│   │   ├── components/ui/
+│   │   ├── hooks/use-auth.ts      # Zustand useAuth hooki
+│   │   ├── services/auth.service.ts
+│   │   ├── types/auth.ts
+│   │   └── lib/axios.ts           # Interceptors bilan sozlangan
+│   ├── components.json            # Shadcn konfiguratsiyasi
 │   └── .env.local
-├── my-project-admin/              # React + Vite (Antd / Mantine / Tailwind)
+├── my-project-admin/              # React + Vite + Ant Design + Toza Auth logikasi
 │   ├── src/
-│   │   ├── api/
-│   │   ├── components/
-│   │   ├── pages/
-│   │   └── types/
+│   │   ├── api/client.ts          # Interceptors bilan sozlangan
+│   │   ├── api/auth.service.ts
+│   │   ├── hooks/useAuth.ts
+│   │   ├── pages/Dashboard.tsx
+│   │   └── types/auth.ts
 │   └── .env
-└── my-project-backend/            # Go Clean Architecture (Gin / Fiber / GORM)
-    ├── cmd/api/main.go
-    ├── config/
-    ├── internal/                  # delivery, domain, usecase, repository
-    ├── pkg/logger/
+└── my-project-backend/            # Go Clean Architecture (Auth + Migrations + Seed)
+    ├── cmd/api/main.go            # API server
+    ├── cmd/migrate/main.go        # Database migratsiyasi (AutoMigrate)
+    ├── cmd/seed/main.go           # Superadmin yaratish
+    ├── config/config.go           # .env sozlamalari
+    ├── config/database.go         # GORM PostgreSQL ulanishi
+    ├── internal/
+    │   ├── domain/user.go         # User modeli va DTOlar
+    │   ├── repository/            # user_repository.go
+    │   ├── usecase/               # auth_usecase.go (bcrypt, jwt)
+    │   └── delivery/http/
+    │       ├── handlers/          # auth_handler.go (register, login, me)
+    │       └── middleware/        # auth.go (JWT AuthMiddleware)
     ├── .env
     └── go.mod
 ```
@@ -114,7 +176,9 @@ Istalgan papkada terminalni ochib, buyruqni bering:
 create-my-stack
 ```
 
-1. **Loyiha nomi:** Masalan: `super-app`.
-2. **Modullarni belgilash:** `Public Web`, `Admin Panel`, `Backend API`, `DevOps`, `AI Guardrails & Rules`.
-3. **Kutubxonalar va AI vositalarini tanlash.**
-4. **Bir necha soniyada:** Barcha modullar, toza arxitektura va AIni jilovlovchi barcha qoidalar avtomatik tayyor bo'ladi!
+1. **Yangi loyiha ochish:** Loyiha nomini kiritasiz va kerakli modullarni tanlaysiz.
+2. **Mavjud loyihaga modul qo‘shish:** Mavjud loyiha ichida turib yoki uning nomini kiritib buyruq berasiz, CLI faqat yetishmayotgan modullarni taklif qiladi va barcha root sozlamalarni sinxronlashtiradi.
+3. **Bitta buyruqda hamma servislarni ishga tushirish:**
+   ```bash
+   npm run dev
+   ```

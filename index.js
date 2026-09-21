@@ -16,7 +16,7 @@ async function main() {
     // 1. Foydalanuvchi bilan interaktiv muloqot
     const answers = await askQuestions();
 
-    const rootPath = path.resolve(process.cwd(), answers.projectName);
+    const rootPath = answers.rootPath || path.resolve(process.cwd(), answers.projectName);
 
     if (!fs.existsSync(rootPath)) {
       fs.mkdirSync(rootPath, { recursive: true });
@@ -24,32 +24,32 @@ async function main() {
 
     const summaryDetails = [];
 
-    // 2. Next.js Public qismi
+    // 2. Next.js Public qismi (agar yangi tanlangan bo'lsa)
     if (answers.components.includes('public')) {
       const detail = await generatePublic(rootPath, answers.projectName, answers);
       summaryDetails.push(detail);
     }
 
-    // 3. React Admin qismi
+    // 3. React Admin qismi (agar yangi tanlangan bo'lsa)
     if (answers.components.includes('admin')) {
       const detail = await generateAdmin(rootPath, answers.projectName, answers);
       summaryDetails.push(detail);
     }
 
-    // 4. Go Backend qismi
+    // 4. Go Backend qismi (agar yangi tanlangan bo'lsa)
     if (answers.components.includes('backend')) {
       const detail = await generateBackend(rootPath, answers.projectName, answers);
       summaryDetails.push(detail);
     }
 
-    // 5. DevOps va Root konfiguratsiyalar
-    if (answers.components.includes('devops')) {
+    // 5. DevOps va Yagona "npm run dev" (har doim barcha modullarni birlashtirib sinxronlaydi)
+    if (answers.isIncremental || answers.components.includes('devops')) {
       const detail = await generateDevops(rootPath, answers.projectName, answers);
       summaryDetails.push(detail);
     }
 
-    // 6. AI Agent Qoidalari va Guardrails
-    if (answers.components.includes('airules')) {
+    // 6. AI Agent Qoidalari va Guardrails (har doim barcha modullarni himoyalaydi)
+    if (answers.isIncremental || answers.components.includes('airules')) {
       const detail = await generateAiRules(rootPath, answers.projectName, answers);
       summaryDetails.push(detail);
     }

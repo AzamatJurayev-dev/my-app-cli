@@ -6,9 +6,10 @@ export async function generateAiRules(rootPath, projectName, options) {
   const spinner = logger.spinner('AI Agent Qoidalari va Guardrails generatsiya qilinmoqda...').start();
 
   try {
-    const hasPublic = options.components.includes('public');
-    const hasAdmin = options.components.includes('admin');
-    const hasBackend = options.components.includes('backend');
+    const allComponents = options.allActiveComponents || options.components || [];
+    const hasPublic = allComponents.includes('public');
+    const hasAdmin = allComponents.includes('admin');
+    const hasBackend = allComponents.includes('backend');
 
     const publicName = `${projectName}-public`;
     const adminName = `${projectName}-admin`;
@@ -81,15 +82,19 @@ ${hasBackend ? `### Go Clean Architecture (\`${backendName}\`):
 - **\`internal/domain\`**: Pure entities and interface definitions. MUST NOT import any other internal package or external HTTP/DB driver.
 - **\`internal/usecase\`**: Pure business logic. Depends ONLY on \`domain\` and repository interfaces.
 - **\`internal/delivery\` (HTTP)**: Handles HTTP requests/responses, input validation, and calls usecases. NEVER call repositories directly from handlers!
+- **Auth & Passwords**: Passwords MUST always be hashed with \`bcrypt\`. Never store plaintext passwords. JWT tokens must be verified via \`middleware.AuthMiddleware\`.
+- **Database Migrations**: Always register new entity models in \`cmd/migrate/main.go\`. Run \`make migrate-up\` and \`make seed\` for database updates.
 - **Zero Circular Dependencies**: Any circular import is a fatal design bug.
 ` : ''}
 ${hasPublic ? `### Next.js 15+ App Router (\`${publicName}\`):
 - Default to **Server Components**. Add \`'use client'\` only at the leaf nodes where user interactivity, React hooks, or browser APIs are needed.
 - **Strict TypeScript**: Never use \`any\`. Define clear interfaces for props and API responses.
+- **Auth Logic**: Use the centralized \`src/services/auth.service.ts\` and \`src/hooks/use-auth.ts\`. Do not bypass \`apiClient\` interceptors.
 - Clean error boundaries and proper loading UI states (\`loading.tsx\`, \`error.tsx\`).
 ` : ''}
 ${hasAdmin ? `### React Admin (\`${adminName}\`):
 - Decouple UI components from data fetching. Use React Query / custom hooks.
+- **Auth Logic**: Use \`src/api/auth.service.ts\` and \`src/hooks/useAuth.ts\`. Tokens are automatically managed by \`apiClient\` interceptors.
 - Centralize API calls in \`src/api/\` with the configured \`apiClient\`.
 ` : ''}
 
