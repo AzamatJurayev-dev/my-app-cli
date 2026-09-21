@@ -3,7 +3,7 @@ import path from 'path';
 import { execSync } from 'child_process';
 import { logger } from '../utils/logger.js';
 
-export async function generateDevops(rootPath, projectName, options) {
+export async function generateDevops(rootPath, projectName, options = {}) {
   const selectedTools = options.devopsTools || ['docker', 'makefile', 'git', 'husky', 'readme'];
   const spinner = logger.spinner('DevOps vositalari va Yagona "npm run dev" sozlanmoqda...').start();
 
@@ -18,7 +18,7 @@ export async function generateDevops(rootPath, projectName, options) {
     const backendFolder = `${projectName}-backend`;
 
     // 1. .gitignore yaratish
-    if (selectedTools.includes('git') || !fs.existsSync(path.join(rootPath, '.gitignore'))) {
+    if (!fs.existsSync(path.join(rootPath, '.gitignore'))) {
       const gitignoreContent = `# Node.js dependencies & builds
 node_modules/
 .next/
@@ -56,22 +56,28 @@ Thumbs.db
 !.vscode/extensions.json
 `;
       fs.writeFileSync(path.join(rootPath, '.gitignore'), gitignoreContent);
+    }
 
-      // git init
+    // git init (faqat foydalanuvchi git initsializatsiyasini tanlagan bo'lsa)
+    if (selectedTools.includes('git') && !fs.existsSync(path.join(rootPath, '.git'))) {
       try {
         execSync('git init', { cwd: rootPath, stdio: 'ignore' });
       } catch (e) {
-        // git bo'lmasa o'tkazib yuborish
+        // git tizimda o'rnatilmagan bo'lsa xatoliksiz o'tkazib yuborish
       }
     }
 
-    // 2. Root package.json: Yagona "npm run dev" (concurrently) va Pre-commit Hooks (Husky)
+    const hasGit = fs.existsSync(path.join(rootPath, '.git'));
+    const wantsHusky = hasGit && (selectedTools.includes('husky') || fs.existsSync(path.join(rootPath, '.husky')));
+
+    // 2. Root package.json: Yagona "npm run dev" (concurrently) & CRUD sub-command
     const packageJsonPath = path.join(rootPath, 'package.json');
     let rootPkg = {
       name: `${projectName}-workspace`,
       private: true,
       scripts: {
-        "prepare": "husky"
+        ...(wantsHusky ? { "prepare": "husky" } : {}),
+        "make:crud": "create-my-stack make:crud"
       },
       "lint-staged": {
         "*.{ts,tsx,js,jsx}": ["eslint --fix"]
@@ -81,7 +87,14 @@ Thumbs.db
     if (fs.existsSync(packageJsonPath)) {
       try {
         const existingPkg = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
-        rootPkg = { ...existingPkg, scripts: { ...(existingPkg.scripts || {}) } };
+        rootPkg = {
+          ...existingPkg,
+          scripts: {
+            ...(wantsHusky ? { "prepare": "husky" } : {}),
+            "make:crud": "create-my-stack make:crud",
+            ...(existingPkg.scripts || {})
+          }
+        };
       } catch (e) {
         // format xato bo'lsa yangitdan shakllantiramiz
       }
@@ -93,44 +106,46 @@ Thumbs.db
     const devCommands = [];
 
     if (hasBackend) {
-      rootPkg.scripts["dev:backend"] = `cd ${backendFolder} && go run cmd/api/main.go`;
+      rootPkg.scripts["dev:backend"] = `cd "${backendFolder}" && go run cmd/api/main.go`;
       devNames.push('BACKEND');
       devColors.push('cyan');
-      devCommands.push('npm run dev:backend');
+      devCommands.push('npm:dev:backend');
     }
 
     if (hasPublic) {
-      rootPkg.scripts["dev:public"] = `npm --prefix ${publicFolder} run dev`;
+      rootPkg.scripts["dev:public"] = `npm --prefix "${publicFolder}" run dev`;
+      rootPkg.scripts["typegen:public"] = `npm --prefix "${publicFolder}" run typegen`;
       devNames.push('PUBLIC');
       devColors.push('blue');
-      devCommands.push('npm run dev:public');
+      devCommands.push('npm:dev:public');
     }
 
     if (hasAdmin) {
-      rootPkg.scripts["dev:admin"] = `npm --prefix ${adminFolder} run dev`;
+      rootPkg.scripts["dev:admin"] = `npm --prefix "${adminFolder}" run dev`;
+      rootPkg.scripts["typegen:admin"] = `npm --prefix "${adminFolder}" run typegen`;
       devNames.push('ADMIN');
       devColors.push('magenta');
-      devCommands.push('npm run dev:admin');
+      devCommands.push('npm:dev:admin');
+    }
+
+    if (hasPublic && hasAdmin) {
+      rootPkg.scripts["typegen"] = "make typegen";
     }
 
     if (devCommands.length > 1) {
-      rootPkg.scripts["dev"] = `npx --yes concurrently -n "${devNames.join(',')}" -c "${devColors.join(',')}" ${devCommands.map(c => `\\"${c}\\"`).join(' ')}`;
+      rootPkg.scripts["dev"] = `npx --yes concurrently -n "${devNames.join(',')}" -c "${devColors.join(',')}" ${devCommands.join(' ')}`;
     } else if (devCommands.length === 1) {
-      rootPkg.scripts["dev"] = devCommands[0];
+      rootPkg.scripts["dev"] = `npm run ${devCommands[0].replace('npm:', '')}`;
     }
 
     fs.writeFileSync(packageJsonPath, JSON.stringify(rootPkg, null, 2));
 
-    // .husky papkasi va pre-commit hook
-    if (selectedTools.includes('husky') || fs.existsSync(path.join(rootPath, '.husky'))) {
+    // .husky papkasi va pre-commit hook (faqat git mavjud bo'lganda)
+    if (wantsHusky) {
       const huskyDir = path.join(rootPath, '.husky');
       fs.mkdirSync(huskyDir, { recursive: true });
 
-      const preCommitHook = `#!/usr/bin/env sh
-. "$(dirname -- "$0")/_/husky.sh"
-
-npx lint-staged
-`;
+      const preCommitHook = `npx lint-staged\n`;
       fs.writeFileSync(path.join(huskyDir, 'pre-commit'), preCommitHook);
     }
 
@@ -175,29 +190,31 @@ volumes:
 
     // 4. Makefile
     let makefileLines = [
-      '.PHONY: help dev docker-up docker-down docker-logs',
+      '.PHONY: help dev docker-up docker-down docker-logs typegen typegen-public typegen-admin make-crud',
       '',
       'help:',
       '\t@echo "Mavjud buyruqlar:"',
-      '\t@echo "  npm run dev      - Barcha qismlarni (Backend, Public, Admin) bir vaqtda ishga tushirish"',
-      '\t@echo "  make dev         - Barcha servislarni yurgazish"',
-      '\t@echo "  make docker-up   - PostgreSQL va Redis konteynerlarini ishga tushirish"',
-      '\t@echo "  make docker-down - Barcha konteynerlarni toxtatish"',
-      '\t@echo "  make docker-logs - Konteyner loglarini kuzatish"'
+      '\t@echo "  npm run dev          - Barcha qismlarni (Backend, Public, Admin) bir vaqtda ishga tushirish"',
+      '\t@echo "  make make-crud ENTITY=Name - Yangi Clean Architecture CRUD yaratish (masalan: ENTITY=Product)"',
+      '\t@echo "  make docker-up       - PostgreSQL va Redis konteynerlarini ishga tushirish"',
+      '\t@echo "  make docker-down     - Barcha konteynerlarni toxtatish"',
+      '\t@echo "  make docker-logs     - Konteyner loglarini kuzatish"'
     ];
 
     if (hasBackend) {
       makefileLines.push(
-        '\t@echo "  make dev-backend - Go backend serverini ishga tushirish"',
-        '\t@echo "  make migrate-up  - Database migratsiyasini bajarish (users jadvali)"',
-        '\t@echo "  make seed        - Dastlabki superadmin ma\'lumotlarini kiritish"'
+        '\t@echo "  make dev-backend     - Go backend serverini ishga tushirish"',
+        '\t@echo "  make migrate-up      - Database migratsiyasini bajarish (users jadvali)"',
+        '\t@echo "  make seed            - Dastlabki superadmin ma\'lumotlarini kiritish"'
       );
     }
     if (hasPublic) {
-      makefileLines.push('\t@echo "  make dev-public  - Next.js veb ilovasini ishga tushirish"');
+      makefileLines.push('\t@echo "  make dev-public      - Next.js veb ilovasini ishga tushirish"');
+      makefileLines.push('\t@echo "  make typegen-public  - Public modulli tiplarni tekshirish"');
     }
     if (hasAdmin) {
-      makefileLines.push('\t@echo "  make dev-admin   - React Admin panelini ishga tushirish"');
+      makefileLines.push('\t@echo "  make dev-admin       - React Admin panelini ishga tushirish"');
+      makefileLines.push('\t@echo "  make typegen-admin   - Admin modulli tiplarni tekshirish"');
     }
 
     makefileLines.push('', 'dev:', '\tnpm run dev', '');
@@ -216,13 +233,37 @@ volumes:
       );
     }
     if (hasPublic) {
-      makefileLines.push('dev-public:', `\tcd ${publicFolder} && npm run dev`, '');
+      makefileLines.push(
+        'dev-public:',
+        `\tcd ${publicFolder} && npm run dev`,
+        '',
+        'typegen-public:',
+        `\t@echo "✔ Public tiplar faol: ${publicFolder}/src/types/"`,
+        ''
+      );
     }
     if (hasAdmin) {
-      makefileLines.push('dev-admin:', `\tcd ${adminFolder} && npm run dev`, '');
+      makefileLines.push(
+        'dev-admin:',
+        `\tcd ${adminFolder} && npm run dev`,
+        '',
+        'typegen-admin:',
+        `\t@echo "✔ Admin tiplar faol: ${adminFolder}/src/types/"`,
+        ''
+      );
+    }
+
+    const typegenDeps = [];
+    if (hasPublic) typegenDeps.push('typegen-public');
+    if (hasAdmin) typegenDeps.push('typegen-admin');
+    if (typegenDeps.length > 0) {
+      makefileLines.push(`typegen: ${typegenDeps.join(' ')}`, '');
     }
 
     makefileLines.push(
+      'make-crud:',
+      '\t@create-my-stack make:crud $(ENTITY)',
+      '',
       'docker-up:',
       '\tdocker compose up -d',
       '',
@@ -246,10 +287,10 @@ volumes:
     ];
 
     if (hasPublic) {
-      readmeLines.push(`- **[${publicFolder}](./${publicFolder})**: Next.js 15+ App Router, Tailwind CSS, Shadcn UI sozlamalari, toza Auth logikasi.`);
+      readmeLines.push(`- **[${publicFolder}](./${publicFolder})**: Next.js 15+ App Router, Tailwind CSS, Shadcn UI sozlamalari, modulli tiplar (\`src/types/*.type.ts\`), toza Auth logikasi.`);
     }
     if (hasAdmin) {
-      readmeLines.push(`- **[${adminFolder}](./${adminFolder})**: React + Vite Admin Panel (Ant Design, toza Auth logikasi).`);
+      readmeLines.push(`- **[${adminFolder}](./${adminFolder})**: React + Vite Admin Panel (Ant Design, modulli tiplar, toza Auth logikasi).`);
     }
     if (hasBackend) {
       readmeLines.push(`- **[${backendFolder}](./${backendFolder})**: Go Clean Architecture (Framework: ${options.goFramework || 'Gin'}, GORM, JWT Auth, Migrations, Seed).`);
@@ -264,6 +305,13 @@ volumes:
       '',
       '# 2. Barcha faol servislarni (Backend, Public, Admin) BIR VAQTDA ishga tushirish:',
       'npm run dev',
+      '```',
+      '',
+      '## 🧩 Tezkor CRUD yaratish (sub-buyruq):',
+      '```bash',
+      '# Masalan, yangi Product modeli va to‘liq Clean Architecture CRUD yaratish:',
+      'npx create-my-stack make:crud Product',
+      '# yoki: make make-crud ENTITY=Product',
       '```',
       '',
       '## 🛠 Alohida ishga tushirish buyruqlari:',
@@ -314,8 +362,8 @@ volumes:
 
     fs.writeFileSync(path.join(rootPath, 'README.md'), readmeLines.join('\n'));
 
-    spinner.succeed('DevOps, Yagona "npm run dev" va barcha konfiguratsiyalar muvaffaqiyatli yangilandi!');
-    return `DevOps vositalari (Yagona "npm run dev", Makefile, Docker, Husky)`;
+    spinner.succeed('DevOps, Yagona "npm run dev" va Makefile muvaffaqiyatli yangilandi!');
+    return `DevOps vositalari (Yagona "npm run dev", make:crud, Makefile, Docker, Husky)`;
   } catch (err) {
     spinner.fail(`DevOps vositalarini yaratishda xatolik: ${err.message}`);
     throw err;

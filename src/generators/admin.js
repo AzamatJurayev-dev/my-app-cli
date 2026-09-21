@@ -55,12 +55,37 @@ export async function generateAdmin(rootPath, projectName, options) {
     const envContent = `VITE_API_URL=http://localhost:8080/api\n`;
     fs.writeFileSync(path.join(adminPath, '.env'), envContent);
 
-    // 5. Types: src/types/auth.ts
+    // 5. Modulli Tiplar (*.type.ts):
+    // 5.1. src/types/common.type.ts
+    const commonTypes = `export interface ApiResponse<T> {
+  success: boolean;
+  data: T;
+  message?: string;
+}
+
+export interface PaginatedResponse<T> {
+  data: T[];
+  total: number;
+  limit?: number;
+  offset?: number;
+}
+
+export interface QueryParams {
+  limit?: number;
+  offset?: number;
+  search?: string;
+  sortBy?: string;
+  order?: "asc" | "desc";
+}
+`;
+    fs.writeFileSync(path.join(adminPath, 'src', 'types', 'common.type.ts'), commonTypes);
+
+    // 5.2. src/types/auth.type.ts
     const authTypes = `export interface User {
   id: number;
   name: string;
   email: string;
-  role: string;
+  role: "admin" | "superadmin" | "editor" | string;
   created_at?: string;
 }
 
@@ -73,14 +98,14 @@ export interface LoginCredentials {
   email: string;
   password: string;
 }
-
-export interface ApiResponse<T> {
-  success: boolean;
-  data: T;
-  message?: string;
-}
 `;
-    fs.writeFileSync(path.join(adminPath, 'src/types/auth.ts'), authTypes);
+    fs.writeFileSync(path.join(adminPath, 'src', 'types', 'auth.type.ts'), authTypes);
+
+    // 5.3. Barrel export: src/types/index.ts
+    const indexTypes = `export * from "./common.type";
+export * from "./auth.type";
+`;
+    fs.writeFileSync(path.join(adminPath, 'src', 'types', 'index.ts'), indexTypes);
 
     // 6. Axios Client with Interceptors (src/api/client.ts)
     const apiClientContent = `import axios from "axios";
@@ -117,7 +142,7 @@ apiClient.interceptors.response.use(
 
     // 7. Auth Service (src/api/auth.service.ts)
     const authServiceContent = `import { apiClient } from "./client";
-import { AuthResponse, LoginCredentials, User } from "../types/auth";
+import { AuthResponse, LoginCredentials, User } from "../types";
 
 export const authService = {
   async login(credentials: LoginCredentials): Promise<AuthResponse> {
@@ -143,13 +168,14 @@ export const authService = {
     // 8. Auth Store / Hook (src/hooks/useAuth.ts)
     const authHookContent = `import { create } from "zustand";
 import { authService } from "../api/auth.service";
-import { LoginCredentials, User } from "../types/auth";
+import { LoginCredentials, User } from "../types";
 
 interface AuthState {
   user: User | null;
   token: string | null;
   isAuthenticated: boolean;
   isLoading: boolean;
+  error: string | null;
   login: (credentials: LoginCredentials) => Promise<void>;
   fetchMe: () => Promise<void>;
   logout: () => void;
@@ -160,12 +186,15 @@ export const useAuth = create<AuthState>((set) => ({
   token: localStorage.getItem("admin_token"),
   isAuthenticated: !!localStorage.getItem("admin_token"),
   isLoading: false,
+  error: null,
 
   login: async (credentials) => {
-    set({ isLoading: true });
+    set({ isLoading: true, error: null });
     try {
       const res = await authService.login(credentials);
       set({ user: res.user, token: res.token, isAuthenticated: true });
+    } catch (err: any) {
+      set({ error: err.message || "Login failed" });
     } finally {
       set({ isLoading: false });
     }
@@ -202,8 +231,39 @@ export const Dashboard: React.FC = () => {
 `;
     fs.writeFileSync(path.join(adminPath, 'src/pages/Dashboard.tsx'), dashboardContent);
 
-    spinner.succeed(`React Admin muvaffaqiyatli tayyorlandi: ${adminName} (${uiChoice.toUpperCase()} + Auth Logic)`);
-    return `${adminName} (React-TS, UI: ${uiChoice.toUpperCase()}, Auth Logic & Interceptors)`;
+    // 10. src/App.tsx
+    const appContent = `import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { Dashboard } from "./pages/Dashboard";
+
+function App() {
+  return (
+    <BrowserRouter>
+      <Routes>
+        <Route path="/" element={<Dashboard />} />
+      </Routes>
+    </BrowserRouter>
+  );
+}
+
+export default App;
+`;
+    fs.writeFileSync(path.join(adminPath, 'src/App.tsx'), appContent);
+
+    // 11. src/main.tsx
+    const mainContent = `import React from "react";
+import ReactDOM from "react-dom/client";
+import App from "./App";
+
+ReactDOM.createRoot(document.getElementById("root")!).render(
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>
+);
+`;
+    fs.writeFileSync(path.join(adminPath, 'src/main.tsx'), mainContent);
+
+    spinner.succeed(`React Admin muvaffaqiyatli tayyorlandi: ${adminName} (${uiChoice.toUpperCase()} + Modulli Tiplar)`);
+    return `${adminName} (React-TS, UI: ${uiChoice.toUpperCase()}, Modulli Tiplar & Auth)`;
   } catch (err) {
     spinner.fail(`React Admin yaratishda xatolik: ${err.message}`);
     throw err;

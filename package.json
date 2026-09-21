@@ -1,6 +1,6 @@
 {
   "name": "my-stack-cli",
-  "version": "1.0.0",
+  "version": "4.0.0",
   "type": "module",
   "bin": {
     "create-my-stack": "./index.js"

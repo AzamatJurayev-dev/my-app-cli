@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { logger } from '../utils/logger.js';
 
-export async function generateAiRules(rootPath, projectName, options) {
+export async function generateAiRules(rootPath, projectName, options = {}) {
   const spinner = logger.spinner('AI Agent Qoidalari va Guardrails generatsiya qilinmoqda...').start();
 
   try {

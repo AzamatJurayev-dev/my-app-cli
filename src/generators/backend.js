@@ -6,6 +6,8 @@ import { logger } from '../utils/logger.js';
 export async function generateBackend(rootPath, projectName, options) {
   const backendName = `${projectName}-backend`;
   const backendPath = path.join(rootPath, backendName);
+  
+  // These variables are reserved for future multi-framework support
   const framework = options.goFramework || 'gin';
   const dbChoice = options.goDatabase || 'gorm';
   const extras = options.goExtras || [];
@@ -29,9 +31,12 @@ export async function generateBackend(rootPath, projectName, options) {
       'internal/usecase',
       'internal/repository',
       'pkg/logger',
-      'pkg/utils'
+      'pkg/utils',
+      'pkg/token'
     ];
     goDirs.forEach((dir) => fs.mkdirSync(path.join(backendPath, dir), { recursive: true }));
+
+    const dbName = projectName.replace(/-/g, '_');
 
     // 2. config/config.go
     const configGo = `package config
@@ -58,7 +63,7 @@ func LoadConfig() *Config {
 
 	dbURL := os.Getenv("DB_URL")
 	if dbURL == "" {
-		dbURL = "postgres://postgres:postgrespassword@localhost:5432/${projectName}_db?sslmode=disable"
+		dbURL = "postgres://postgres:postgrespassword@localhost:5432/${dbName}_db?sslmode=disable"
 	}
 
 	jwtSecret := os.Getenv("JWT_SECRET")
@@ -80,6 +85,7 @@ func LoadConfig() *Config {
 
 import (
 	"log"
+	"time"
 
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -91,6 +97,14 @@ func InitDB(dsn string) *gorm.DB {
 		log.Printf("⚠️ DB ulanishida ogohlantirish (Server davom etadi): %v", err)
 		return nil
 	}
+
+	sqlDB, poolErr := db.DB()
+	if poolErr == nil {
+		sqlDB.SetMaxOpenConns(25)
+		sqlDB.SetMaxIdleConns(10)
+		sqlDB.SetConnMaxLifetime(5 * time.Minute)
+	}
+
 	log.Println("✔ PostgreSQL (GORM) muvaffaqiyatli ulandi")
 	return db
 }
@@ -100,7 +114,10 @@ func InitDB(dsn string) *gorm.DB {
     // 4. internal/domain/user.go
     const userDomain = `package domain
 
-import "time"
+import (
+	"context"
+	"time"
+)
 
 type User struct {
 	ID        uint      \`json:"id" gorm:"primaryKey"\`
@@ -129,15 +146,15 @@ type AuthResponse struct {
 }
 
 type UserRepository interface {
-	Create(user *User) error
-	FindByEmail(email string) (*User, error)
-	FindByID(id uint) (*User, error)
+	Create(ctx context.Context, user *User) error
+	FindByEmail(ctx context.Context, email string) (*User, error)
+	FindByID(ctx context.Context, id uint) (*User, error)
 }
 
 type AuthUsecase interface {
-	Register(req *RegisterRequest) (*AuthResponse, error)
-	Login(req *LoginRequest) (*AuthResponse, error)
-	GetMe(userID uint) (*User, error)
+	Register(ctx context.Context, req *RegisterRequest) (*AuthResponse, error)
+	Login(ctx context.Context, req *LoginRequest) (*AuthResponse, error)
+	GetMe(ctx context.Context, userID uint) (*User, error)
 }
 `;
     fs.writeFileSync(path.join(backendPath, 'internal/domain/user.go'), userDomain);
@@ -146,6 +163,7 @@ type AuthUsecase interface {
     const userRepo = `package repository
 
 import (
+	"context"
 	"errors"
 
 	"${backendName}/internal/domain"
@@ -160,30 +178,30 @@ func NewUserRepository(db *gorm.DB) domain.UserRepository {
 	return &userRepository{db: db}
 }
 
-func (r *userRepository) Create(user *domain.User) error {
+func (r *userRepository) Create(ctx context.Context, user *domain.User) error {
 	if r.db == nil {
 		return errors.New("database mavjud emas")
 	}
-	return r.db.Create(user).Error
+	return r.db.WithContext(ctx).Create(user).Error
 }
 
-func (r *userRepository) FindByEmail(email string) (*domain.User, error) {
+func (r *userRepository) FindByEmail(ctx context.Context, email string) (*domain.User, error) {
 	if r.db == nil {
 		return nil, errors.New("database mavjud emas")
 	}
 	var user domain.User
-	if err := r.db.Where("email = ?", email).First(&user).Error; err != nil {
+	if err := r.db.WithContext(ctx).Where("email = ?", email).First(&user).Error; err != nil {
 		return nil, err
 	}
 	return &user, nil
 }
 
-func (r *userRepository) FindByID(id uint) (*domain.User, error) {
+func (r *userRepository) FindByID(ctx context.Context, id uint) (*domain.User, error) {
 	if r.db == nil {
 		return nil, errors.New("database mavjud emas")
 	}
 	var user domain.User
-	if err := r.db.First(&user, id).Error; err != nil {
+	if err := r.db.WithContext(ctx).First(&user, id).Error; err != nil {
 		return nil, err
 	}
 	return &user, nil
@@ -191,16 +209,14 @@ func (r *userRepository) FindByID(id uint) (*domain.User, error) {
 `;
     fs.writeFileSync(path.join(backendPath, 'internal/repository/user_repository.go'), userRepo);
 
-    // 6. JWT Token Middleware (internal/delivery/http/middleware/auth.go)
-    const jwtMiddleware = `package middleware
+    // 5.5 pkg/token/token.go
+    const tokenFile = `package token
 
 import (
 	"errors"
-	"net/http"
-	"strings"
+	"fmt"
 	"time"
 
-	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
 )
 
@@ -227,6 +243,9 @@ func GenerateToken(userID uint, email, role, secret string) (string, error) {
 
 func ValidateToken(tokenString, secret string) (*Claims, error) {
 	token, err := jwt.ParseWithClaims(tokenString, &Claims{}, func(token *jwt.Token) (interface{}, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
+		}
 		return []byte(secret), nil
 	})
 	if err != nil {
@@ -237,6 +256,19 @@ func ValidateToken(tokenString, secret string) (*Claims, error) {
 	}
 	return nil, errors.New("noto'g'ri token")
 }
+`;
+    fs.writeFileSync(path.join(backendPath, 'pkg/token/token.go'), tokenFile);
+
+    // 6. JWT Token Middleware (internal/delivery/http/middleware/auth.go)
+    const jwtMiddleware = `package middleware
+
+import (
+	"net/http"
+	"strings"
+
+	"${backendName}/pkg/token"
+	"github.com/gin-gonic/gin"
+)
 
 func AuthMiddleware(secret string) gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -254,7 +286,7 @@ func AuthMiddleware(secret string) gin.HandlerFunc {
 			return
 		}
 
-		claims, err := ValidateToken(parts[1], secret)
+		claims, err := token.ValidateToken(parts[1], secret)
 		if err != nil {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "Yaroqsiz yoki muddati o'tgan token"})
 			c.Abort()
@@ -274,11 +306,13 @@ func AuthMiddleware(secret string) gin.HandlerFunc {
     const authUsecase = `package usecase
 
 import (
+	"context"
 	"errors"
 
-	"${backendName}/internal/delivery/http/middleware"
 	"${backendName}/internal/domain"
+	"${backendName}/pkg/token"
 	"golang.org/x/crypto/bcrypt"
+	"gorm.io/gorm"
 )
 
 type authUsecase struct {
@@ -293,8 +327,11 @@ func NewAuthUsecase(userRepo domain.UserRepository, jwtSecret string) domain.Aut
 	}
 }
 
-func (u *authUsecase) Register(req *domain.RegisterRequest) (*domain.AuthResponse, error) {
-	existing, _ := u.userRepo.FindByEmail(req.Email)
+func (u *authUsecase) Register(ctx context.Context, req *domain.RegisterRequest) (*domain.AuthResponse, error) {
+	existing, err := u.userRepo.FindByEmail(ctx, req.Email)
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, err
+	}
 	if existing != nil {
 		return nil, errors.New("ushbu email allaqachon ro'yxatdan o'tgan")
 	}
@@ -311,23 +348,23 @@ func (u *authUsecase) Register(req *domain.RegisterRequest) (*domain.AuthRespons
 		Role:     "user",
 	}
 
-	if err := u.userRepo.Create(user); err != nil {
+	if err := u.userRepo.Create(ctx, user); err != nil {
 		return nil, err
 	}
 
-	token, err := middleware.GenerateToken(user.ID, user.Email, user.Role, u.jwtSecret)
+	tokenStr, err := token.GenerateToken(user.ID, user.Email, user.Role, u.jwtSecret)
 	if err != nil {
 		return nil, err
 	}
 
 	return &domain.AuthResponse{
-		Token: token,
+		Token: tokenStr,
 		User:  user,
 	}, nil
 }
 
-func (u *authUsecase) Login(req *domain.LoginRequest) (*domain.AuthResponse, error) {
-	user, err := u.userRepo.FindByEmail(req.Email)
+func (u *authUsecase) Login(ctx context.Context, req *domain.LoginRequest) (*domain.AuthResponse, error) {
+	user, err := u.userRepo.FindByEmail(ctx, req.Email)
 	if err != nil || user == nil {
 		return nil, errors.New("email yoki parol noto'g'ri")
 	}
@@ -336,19 +373,19 @@ func (u *authUsecase) Login(req *domain.LoginRequest) (*domain.AuthResponse, err
 		return nil, errors.New("email yoki parol noto'g'ri")
 	}
 
-	token, err := middleware.GenerateToken(user.ID, user.Email, user.Role, u.jwtSecret)
+	tokenStr, err := token.GenerateToken(user.ID, user.Email, user.Role, u.jwtSecret)
 	if err != nil {
 		return nil, err
 	}
 
 	return &domain.AuthResponse{
-		Token: token,
+		Token: tokenStr,
 		User:  user,
 	}, nil
 }
 
-func (u *authUsecase) GetMe(userID uint) (*domain.User, error) {
-	return u.userRepo.FindByID(userID)
+func (u *authUsecase) GetMe(ctx context.Context, userID uint) (*domain.User, error) {
+	return u.userRepo.FindByID(ctx, userID)
 }
 `;
     fs.writeFileSync(path.join(backendPath, 'internal/usecase/auth_usecase.go'), authUsecase);
@@ -378,7 +415,7 @@ func (h *AuthHandler) Register(c *gin.Context) {
 		return
 	}
 
-	res, err := h.authUsecase.Register(&req)
+	res, err := h.authUsecase.Register(c.Request.Context(), &req)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -394,7 +431,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 
-	res, err := h.authUsecase.Login(&req)
+	res, err := h.authUsecase.Login(c.Request.Context(), &req)
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
 		return
@@ -410,7 +447,13 @@ func (h *AuthHandler) GetMe(c *gin.Context) {
 		return
 	}
 
-	user, err := h.authUsecase.GetMe(userID.(uint))
+	id, ok := userID.(uint)
+	if !ok {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Foydalanuvchi ID noto'g'ri formatda"})
+		return
+	}
+
+	user, err := h.authUsecase.GetMe(c.Request.Context(), id)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Foydalanuvchi topilmadi"})
 		return
@@ -453,11 +496,13 @@ func main() {
     const seedMain = `package main
 
 import (
+	"errors"
 	"log"
 
 	"${backendName}/config"
 	"${backendName}/internal/domain"
 	"golang.org/x/crypto/bcrypt"
+	"gorm.io/gorm"
 )
 
 func main() {
@@ -473,7 +518,11 @@ func main() {
 	_ = db.AutoMigrate(&domain.User{})
 
 	var existing domain.User
-	if err := db.Where("email = ?", "admin@example.com").First(&existing).Error; err == nil {
+	if err := db.Where("email = ?", "admin@example.com").First(&existing).Error; err != nil {
+		if !errors.Is(err, gorm.ErrRecordNotFound) {
+			log.Fatalf("❌ Foydalanuvchini tekshirishda xato: %v", err)
+		}
+	} else {
 		log.Println("ℹ Superadmin (admin@example.com) allaqachon mavjud.")
 		return
 	}
@@ -530,7 +579,13 @@ func main() {
 
 	// 3. Router va Middleware sozlamalari
 	r := gin.Default()
-	r.Use(cors.Default())
+	r.Use(cors.New(cors.Config{
+		AllowOrigins:     []string{"http://localhost:3000", "http://localhost:5173"},
+		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
+		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization"},
+		ExposeHeaders:    []string{"Content-Length"},
+		AllowCredentials: true,
+	}))
 
 	api := r.Group("/api")
 	{
@@ -568,7 +623,7 @@ func main() {
 
     // 12. .env va .env.example
     const envExample = `PORT=8080
-DB_URL=postgres://postgres:postgrespassword@localhost:5432/${projectName}_db?sslmode=disable
+DB_URL=postgres://postgres:postgrespassword@localhost:5432/${dbName}_db?sslmode=disable
 JWT_SECRET=supersecretjwtkey_change_in_production
 `;
     fs.writeFileSync(path.join(backendPath, '.env.example'), envExample);
@@ -576,7 +631,12 @@ JWT_SECRET=supersecretjwtkey_change_in_production
 
     // 13. go mod init va zarur paketlar
     spinner.text = `[3/3] Go Clean Architecture paketlari o'rnatilmoqda (Gin, GORM, JWT, bcrypt)...`;
-    execSync(`go mod init ${backendName}`, { cwd: backendPath, stdio: 'ignore' });
+    
+    try {
+      execSync(`go mod init ${backendName}`, { cwd: backendPath, stdio: 'ignore' });
+    } catch (e) {
+      throw new Error(`Go tizimga o'rnatilmagan yoki xato yuz berdi. Go (https://golang.org) o'rnatilganini tekshiring: ${e.message}`);
+    }
 
     const goPackages = [
       'github.com/gin-gonic/gin',

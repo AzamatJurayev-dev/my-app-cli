@@ -1,6 +1,11 @@
 import chalk from 'chalk';
 import ora from 'ora';
 import boxen from 'boxen';
+import fs from 'fs';
+import path from 'path';
+
+const pkgPath = new URL('../../package.json', import.meta.url);
+const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
 
 export const logger = {
   banner() {
@@ -13,7 +18,7 @@ export const logger = {
           margin: 1,
           borderStyle: 'round',
           borderColor: 'cyan',
-          title: '✨ create-my-stack v2.0',
+          title: `✨ create-my-stack v${pkg.version}`,
           titleAlignment: 'center'
         }
       )
@@ -44,6 +49,7 @@ export const logger = {
   },
 
   summaryBox(projectName, details) {
+    details = details || [];
     const content = [
       chalk.bold.green(`🎉 [${projectName}] loyihasi muvaffaqiyatli yaratildi!\n`),
       chalk.bold.white('📦 O\'rnatilgan modullar:'),
